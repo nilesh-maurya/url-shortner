@@ -4,7 +4,7 @@ var express = require("express");
 var mongo = require("mongodb");
 var mongoose = require("mongoose");
 const dns = require("dns");
-const Math = require("mathjs");
+const crypto = require('crypto');
 
 var cors = require("cors");
 
@@ -15,7 +15,7 @@ var port = process.env.PORT || 3000;
 
 /** this project needs a db !! **/
 
-// mongoose.connect(process.env.MONGOLAB_URI);
+mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true});
 
 app.use(cors());
 
@@ -28,42 +28,44 @@ app.get("/", function(req, res) {
   res.sendFile(process.cwd() + "/views/index.html");
 });
 
+
+// mongooose model
+const Urldb = mongoose.model('Urldb', {
+  original_url: {
+    type: String,
+    required: true
+  },
+  short_url: {
+    type: String
+  }
+});
+
 // your first API endpoint...
 app.get("/api/hello", function(req, res) {
   res.json({ greeting: "hello API" });
 });
-
-const data = [];
-
-function getRandom(min, max) {
-  min = Math.ceil(min);
-  max = Math.floor(max);
-
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
 
 app.get("/api/shorturl/new", function(req, res) {
   dns.lookup(req.headers.host, function(err, address) {
     if (err) {
       res.json({ error: "invalid URL" });
     } else {
-      const randint = getRandom(1, 100);
-      // if(data.map(obj => obj.short_url === randint)){};
-      data.push({ original_url: req.headers.host, short_url: randint });
-      res.json({ original_url: req.headers.host, short_url: randint });
+      crypto.randomBytes(8, (err, buf) => {
+        if(err) throw err;
+        const hash = buf.toString('Hex');
+        Urldb.insert({original_url: req.headers.host, short_url: hash}, function(err, data){
+          res.json({ original_url: data.original_url, short_url: data.hash });
+        });
+      });
     }
   });
 });
 
-app.get("/api/shorturl/:num", function(req, res) {
-  const num = req.params.num;
-  const original_url = data.map(obj => {
-    if (obj.short_url === num) {
-      return obj.original_url;
-    }
+app.get("/api/shorturl/:hash", function(req, res) {
+  const hash = req.params.hash;
+  Urldb.find({short_url: hash}, function(err, data){
+    res.redirect(data.original_url);
   });
-
-  res.redirect(original_url);
 });
 
 app.listen(port, function() {
